@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<head>
+  <title>threedraw</title>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="background-color:#aaaaaa">
+	<h1 id="serv-ip" style="font-family:sans-serif">connecting...</h1>
+	<div style="background-color:#dddddd; max-width:650; max-height:400">
+	<canvas id="canvas", width=640, height=390></canvas>
+	</div>
+	
+  <script
+		src="http://code.jquery.com/jquery-3.2.1.min.js"
+		integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
+		crossorigin="anonymous">
+	</script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.4/socket.io.js"></script>
+	<script>
+	  var socket = io('http://localhost:8081');
+  	socket.on('open', function (data) {
+    	$('#serv-ip').text(data.serverIp);
+    	socket.emit('open-reply', 'hello back!');
+  	});
+		
+	
+		var context;
+		var width, height;
+		var mouseDown = false;
+		var localRot = 0;
+		var localZ = 0;
+		var lastChain = [];
+		
+		function update(){
+			context.clearRect(0, 0, width, height)
+			for(chain of drawing) {
+				drawPath(chain)
+			}
+		}
+		
+		function rotateY(point, rot){
+			return {'x': point.x*Math.cos(rot) - point.z*Math.sin(rot),
+							'y': point.y, 
+							'z': point.x*Math.sin(rot) + point.z*Math.cos(rot)
+			}
+		}
+		
+		function homog(point){
+			return {'x': (point.x / width) - 0.5,
+							'y': (point.y / height) - 0.5,
+							'z': point.z
+			}
+		}
+		
+		function dehomog(point){
+			return {'x': ((point.x + 0.5) * width), 
+							'y': ((point.y + 0.5) * height),
+							'z': point.z
+			}
+		}
+		
+		function perspZ(point, lz){
+			return {'x': point.x * ((point.z - lz + 2) / 2),
+							'y': point.y * ((point.z - lz + 2) / 2),
+							'z': lz
+			}
+		}
+		
+		function drawPath(chain){
+			context.beginPath();
+			context.strokeStyle = "black";
+			context.lineWidth = 1;
+			
+			start = dehomog(perspZ(rotateY(chain[0], localRot), localZ));
+			context.moveTo(start.x, start.y);
+			
+			for (point of chain.slice(1)){
+				spoint = dehomog(perspZ(rotateY(point, localRot), localZ));
+				context.lineTo(spoint.x, spoint.y);
+			}
+			
+			context.stroke();
+			context.closePath();
+		}
+		
+		function drawStroke(start, end){
+			drawPath([start, end]);
+		}
+		
+		$('body').keydown(function(event){
+				if(event.which == 37){ // left
+					(localRot == 0) ? 
+						localRot = (Math.PI*(2 - 1/36)) : 
+						localRot -= Math.PI/36;
+					update(drawing);
+				}
+				else if (event.which == 39){ // right
+					(localRot == (Math.PI*(2 - 1/36))) ? 
+						localRot = 0 : 
+						localRot += Math.PI/36;
+					update(drawing);
+				}
+				else if(event.which == 38){ // up
+					(localZ >= 1) ? 
+						localZ = 1 :
+						localZ += 0.05;
+					update(drawing);
+				}
+				else if(event.which == 40){ // down
+					(localZ <= -1) ? 
+						localZ = -1 :
+						localZ -= 0.05;
+					update(drawing);
+				}
+		});
+		
+		$('#canvas').ready(function(){
+			context = $('#canvas')[0].getContext('2d');
+			width = $('#canvas')[0].width;
+			height = $('#canvas')[0].height;
+			
+			$('#canvas').mousedown(function(event){
+				console.log('mousedown event');
+				mouseDown = true;
+				
+				x = (event.pageX - canvas.offsetLeft);
+				y = (event.pageY - canvas.offsetTop);
+				
+				immediatePoint = {'x': x, 'y': y, 'z': localZ};
+				point = rotateY(perspZ(homog(immediatePoint), localZ), -1*localRot);
+				
+				lastChain = [point];
+
+			});
+			
+			$('#canvas').mouseup(function(event){
+				console.log('mouseup event');
+				mouseDown = false;
+				socket.emit('addition', lastChain);
+			});
+			
+			$('#canvas').mousemove(function(event){
+				if(mouseDown){
+					x = (event.pageX - canvas.offsetLeft);
+					y = (event.pageY - canvas.offsetTop);
+					
+					immediatePoint = {'x': x, 'y': y, 'z': localZ};
+					point = rotateY(perspZ(homog(immediatePoint), localZ), -1*localRot);
+					
+					drawStroke(lastChain[lastChain.length - 1], point);
+					lastChain.push(point);
+				}
+			});
+			
+			socket.on('update', function(data){
+				console.log('updated!')
+				drawing = data
+				update(data)
+			})
+		});
+	</script>
+</body>
+
