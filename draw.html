@@ -5,12 +5,19 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
-<body style="background-color:#aaaaaa">
-	<h1 id="serv-ip" style="font-family:sans-serif">connecting...</h1>
-	<div style="background-color:#dddddd; max-width:650; max-height:400">
-	<canvas id="canvas", width=640, height=390></canvas>
+<body style="background-color:#000; color:#fff; font-family:sans-serif">
+	<h1>draw in three dee</h1>
+	<h2 id="serv-ip" >connecting...</h2>
+	<div style="background-color:#abd; max-width:800; max-height:600">
+	<canvas id="canvas", width=960, height=480></canvas>
 	</div>
-	
+	<p>
+		r:<span id="lrot">0</span><br/>
+		z:<span id="lz">0</span><br/>
+		x:<span id="mousex"></span><br/>
+		y:<span id="mousey"></span><br/>
+	</p>
+	<p> thanks to mike from echosec for all the help<p/>
   <script
 		src="http://code.jquery.com/jquery-3.2.1.min.js"
 		integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
@@ -18,9 +25,9 @@
 	</script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.4/socket.io.js"></script>
 	<script>
-	  var socket = io('http://localhost:8081');
+	 var socket = io('http://206.87.189.29:8081');
   	socket.on('open', function (data) {
-    	$('#serv-ip').text(data.serverIp);
+    	$('#serv-ip').text("http://206.87.189.29:8080");
     	socket.emit('open-reply', 'hello back!');
   	});
 		
@@ -67,21 +74,57 @@
 			}
 		}
 		
+		function col(z){
+			value = Math.floor(((z+1)/2) * 8);
+			switch(value) {
+				case 0:
+					return '#226';
+					break;
+				case 1:
+					return '#266';
+					break;
+				case 2:
+					return '#262';
+					break;
+				case 3:
+					return '#662';
+					break;
+				case 4:
+					return '#622';
+					break;
+				case 5:
+					return '#626';
+					break;
+				case 6:
+					return '#226';
+					break;
+				case 7:
+					return '#266';
+			}
+				
+		}
+		
 		function drawPath(chain){
 			context.beginPath();
-			context.strokeStyle = "black";
-			context.lineWidth = 1;
+			context.lineWidth = 2;
 			
 			start = dehomog(perspZ(rotateY(chain[0], localRot), localZ));
 			context.moveTo(start.x, start.y);
+			context.strokeStyle = col(chain[0].z);
 			
 			for (point of chain.slice(1)){
 				spoint = dehomog(perspZ(rotateY(point, localRot), localZ));
 				context.lineTo(spoint.x, spoint.y);
+				context.stroke();
+				context.closePath();
+				context.beginPath();
+				context.strokeStyle = col(point.z);
+				context.lineWidth = 2;
+				context.moveTo(spoint.x, spoint.y);
+				
 			}
-			
-			context.stroke();
 			context.closePath();
+			
 		}
 		
 		function drawStroke(start, end){
@@ -90,30 +133,40 @@
 		
 		$('body').keydown(function(event){
 				if(event.which == 37){ // left
-					(localRot == 0) ? 
+					(localRot <= 0) ? 
 						localRot = (Math.PI*(2 - 1/36)) : 
 						localRot -= Math.PI/36;
+					$("#lrot").text(localRot)
 					update(drawing);
 				}
 				else if (event.which == 39){ // right
-					(localRot == (Math.PI*(2 - 1/36))) ? 
+					(localRot >= (Math.PI*(2 - 1/36))) ? 
 						localRot = 0 : 
 						localRot += Math.PI/36;
+					$("#lrot").text(localRot)
 					update(drawing);
 				}
 				else if(event.which == 38){ // up
-					(localZ >= 1) ? 
-						localZ = 1 :
-						localZ += 0.05;
+					(localZ >= 0.5) ? 
+						localZ = 0.5 :
+						localZ += 0.01;
+					$("#lz").text(localZ)
 					update(drawing);
 				}
 				else if(event.which == 40){ // down
-					(localZ <= -1) ? 
-						localZ = -1 :
-						localZ -= 0.05;
+					(localZ <= -0.5) ? 
+						localZ = -0.5 :
+						localZ -= 0.01;
+					$("#lz").text(localZ)
 					update(drawing);
 				}
 		});
+		
+		socket.on('update', function(data){
+			console.log('updated!')
+			drawing = data
+			update(data)
+		})
 		
 		$('#canvas').ready(function(){
 			context = $('#canvas')[0].getContext('2d');
@@ -141,23 +194,21 @@
 			});
 			
 			$('#canvas').mousemove(function(event){
+				x = (event.pageX - canvas.offsetLeft);
+				y = (event.pageY - canvas.offsetTop);
+				immediatePoint = {'x': x, 'y': y, 'z': localZ};
+			
+				$('#mousex').text(homog(immediatePoint).x)
+				$('#mousey').text(homog(immediatePoint).y)
+				
 				if(mouseDown){
-					x = (event.pageX - canvas.offsetLeft);
-					y = (event.pageY - canvas.offsetTop);
 					
-					immediatePoint = {'x': x, 'y': y, 'z': localZ};
 					point = rotateY(perspZ(homog(immediatePoint), localZ), -1*localRot);
 					
 					drawStroke(lastChain[lastChain.length - 1], point);
 					lastChain.push(point);
 				}
 			});
-			
-			socket.on('update', function(data){
-				console.log('updated!')
-				drawing = data
-				update(data)
-			})
 		});
 	</script>
 </body>
